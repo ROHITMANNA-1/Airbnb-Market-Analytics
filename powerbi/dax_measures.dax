@@ -1,0 +1,230 @@
+// ============================================================================
+// Airbnb Market Analytics & Investment Platform
+// Phase 3: DAX Measures (15 core measures)
+// ============================================================================
+// Setup prerequisites in Power BI Desktop before these will work:
+//   1. Create a dedicated measures table: Modeling -> New Table -> "_Measures"
+//      = ROW("x", 0)  — then delete the [x] column. Put all measures here
+//      rather than scattered across fact tables; standard practice.
+//   2. Mark DimDate as the official date table: right-click DimDate ->
+//      Mark as Date Table -> Date column = [Date]. Time-intelligence
+//      functions (DATEADD, SAMEPERIODLASTYEAR, DATESINPERIOD) fail silently
+//      or error without this.
+//   3. Confirm all 11 relationships from docs/POWERBI_DATA_MODEL.md are in
+//      place and set to single-direction (dimension -> fact).
+//
+// CAVEAT ON TIME INTELLIGENCE: Inside Airbnb's calendar.csv is typically a
+// single forward-looking year (not multi-year history). YoY Growth (#7) and
+// the recursive completeness check from Phase 2 will only return meaningful
+// values if you've combined multiple dated snapshots from Inside Airbnb's
+// archive. Within a single year, MoM Growth (#6) and the moving average
+// (#8) work fine.
+// ============================================================================
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Core Revenue & Occupancy KPIs
+// ------------------------------------------------------------------------
+
+// 1. Total Revenue
+// Grounded in FactCalendarDaily (not FactListingPerformance) specifically
+// so it responds correctly to DimDate filters/slicers.
+Total Revenue =
+SUM ( FactCalendarDaily[BookedRevenue] )
+
+
+// 2. Total Listings
+Total Listings =
+DISTINCTCOUNT ( DimListing[ListingKey] )
+
+
+// 3. Avg Occupancy %
+// Nights-weighted average (SUM/SUM), not AVERAGE(OccupancyRate) — avoids
+// letting a low-volume listing skew the market average as much as a
+// high-volume one.
+Avg Occupancy % =
+DIVIDE (
+    SUM ( FactCalendarDaily[IsBooked] ),
+    COUNTROWS ( FactCalendarDaily )
+)
+
+
+// 4. ADR (Average Daily Rate)
+// Revenue per BOOKED night — the core hospitality pricing KPI.
+ADR =
+DIVIDE (
+    SUM ( FactCalendarDaily[BookedRevenue] ),
+    SUM ( FactCalendarDaily[IsBooked] )
+)
+
+
+// 5. RevPAR (Revenue Per Available Night)
+// Revenue spread across ALL tracked nights, not just booked ones — the
+// standard metric for comparing listings regardless of size/price point.
+RevPAR =
+DIVIDE (
+    SUM ( FactCalendarDaily[BookedRevenue] ),
+    COUNTROWS ( FactCalendarDaily )
+)
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Time Intelligence
+// ------------------------------------------------------------------------
+
+// 6. Revenue MoM Growth %
+Revenue MoM Growth % =
+VAR CurrentRevenue = [Total Revenue]
+VAR PriorMonthRevenue =
+    CALCULATE ( [Total Revenue], DATEADD ( DimDate[Date], -1, MONTH ) )
+RETURN
+    DIVIDE ( CurrentRevenue - PriorMonthRevenue, PriorMonthRevenue )
+
+
+// 7. Revenue YoY Growth %
+// See caveat at top of file — requires multi-year calendar data to return
+// non-blank values.
+Revenue YoY Growth % =
+VAR CurrentRevenue = [Total Revenue]
+VAR PriorYearRevenue =
+    CALCULATE ( [Total Revenue], SAMEPERIODLASTYEAR ( DimDate[Date] ) )
+RETURN
+    DIVIDE ( CurrentRevenue - PriorYearRevenue, PriorYearRevenue )
+
+
+// 8. Revenue 3-Month Moving Average
+// Trailing-3-month total divided by 3 — a monthly moving average rather
+// than a daily one, since that's the unit stakeholders actually reason in.
+Revenue 3-Month Moving Avg =
+VAR TrailingTotal =
+    CALCULATE (
+        [Total Revenue],
+        DATESINPERIOD ( DimDate[Date], MAX ( DimDate[Date] ), -3, MONTH )
+    )
+RETURN
+    DIVIDE ( TrailingTotal, 3 )
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Dynamic Ranking
+// ------------------------------------------------------------------------
+
+// 9. Listing Revenue Rank
+// ALLSELECTED (not ALL) so the rank recalculates correctly within
+// whatever slicer context the user has applied (e.g. ranking only within
+// a selected neighborhood), rather than always ranking against the
+// entire unfiltered market.
+Listing Revenue Rank =
+RANKX ( ALLSELECTED ( DimListing ), [Total Revenue], , DESC, DENSE )
+
+
+// 10. Neighbourhood Revenue Rank
+Neighbourhood Revenue Rank =
+RANKX ( ALLSELECTED ( DimNeighbourhood ), [Total Revenue], , DESC, DENSE )
+
+
+// 11. Is Top 10 Listing
+// Returns 1/0 rather than TRUE/FALSE so it can be summed directly in a
+// card visual ("14 of your filtered listings are Top 10 market-wide").
+Is Top 10 Listing =
+IF ( [Listing Revenue Rank] <= 10, 1, 0 )
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Cumulative & Comparative
+// ------------------------------------------------------------------------
+
+// 12. Cumulative Revenue
+// Running total pattern — filters DimDate down to every date up to and
+// including the current one in the visual's context.
+Cumulative Revenue =
+CALCULATE (
+    [Total Revenue],
+    FILTER ( ALLSELECTED ( DimDate ), DimDate[Date] <= MAX ( DimDate[Date] ) )
+)
+
+
+// 13. Pricing Opportunity Count
+// Count of listings currently flagged Over/Underpriced by the Phase 1/2
+// pricing_gap logic — the number that should show as a red badge on the
+// Pricing dashboard page.
+Pricing Opportunity Count =
+CALCULATE (
+    DISTINCTCOUNT ( FactListingPerformance[ListingKey] ),
+    FactListingPerformance[PricingSignal] <> "Well-Priced"
+)
+
+
+// 14. Superhost Revenue Share %
+// What fraction of total revenue superhosts are responsible for — a
+// direct answer to "does superhost status matter financially".
+Superhost Revenue Share % =
+VAR SuperhostRevenue =
+    CALCULATE ( [Total Revenue], DimHost[IsSuperhost] = TRUE )
+VAR MarketRevenue =
+    CALCULATE ( [Total Revenue], ALL ( DimHost[IsSuperhost] ) )
+RETURN
+    DIVIDE ( SuperhostRevenue, MarketRevenue )
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Investment (⚠️ built on SYNTHETIC valuation data)
+// ------------------------------------------------------------------------
+
+// 15. Avg Estimated ROI %
+// IMPORTANT: sourced from FactListingPerformance[EstimatedAnnualROIPct],
+// which is built on a SYNTHETIC estimated_property_value (see
+// docs/DATA_DICTIONARY.md). Every visual using this measure must display
+// the word "Estimated" in its title — never present as verified ROI.
+Avg Estimated ROI % =
+AVERAGE ( FactListingPerformance[EstimatedAnnualROIPct] )
+
+
+// ------------------------------------------------------------------------
+// CATEGORY: Dashboard support measures
+// ------------------------------------------------------------------------
+
+Overpriced Listings =
+CALCULATE (
+    DISTINCTCOUNT ( FactListingPerformance[ListingKey] ),
+    FactListingPerformance[PricingSignal] = "Possibly Overpriced"
+)
+
+Underpriced Listings =
+CALCULATE (
+    DISTINCTCOUNT ( FactListingPerformance[ListingKey] ),
+    FactListingPerformance[PricingSignal] = "Possibly Underpriced"
+)
+
+Average Estimated Property Value =
+AVERAGE ( FactListingPerformance[EstimatedPropertyValue] )
+
+Total Estimated Property Value =
+SUM ( FactListingPerformance[EstimatedPropertyValue] )
+
+Stale Listings =
+CALCULATE (
+    DISTINCTCOUNT ( DimListing[ListingKey] ),
+    DimListing[IsStaleListing] = TRUE ()
+)
+
+Review Count =
+SUM ( FactReviews[ReviewCount] )
+
+Average Review Rating =
+AVERAGE ( FactReviewScores[Rating] )
+
+Average Cleanliness Score =
+AVERAGE ( FactReviewScores[Cleanliness] )
+
+Average Checkin Score =
+AVERAGE ( FactReviewScores[Checkin] )
+
+Average Communication Score =
+AVERAGE ( FactReviewScores[Communication] )
+
+Average Location Score =
+AVERAGE ( FactReviewScores[LocationScore] )
+
+Average Value Score =
+AVERAGE ( FactReviewScores[ValueScore] )

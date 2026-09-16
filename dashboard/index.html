@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Airbnb market analytics dashboard with revenue, occupancy, pricing, host and investment insights.">
+  <title>Airbnb Market Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">A</span><span>Market<br><strong>Intelligence</strong></span></div>
+      <div class="sidebar-label">Workspace</div>
+      <nav class="nav" aria-label="Dashboard views">
+        <button class="nav-item active" data-view="overview"><span>◒</span>Overview</button>
+        <button class="nav-item" data-view="market"><span>⌁</span>Market mix</button>
+        <button class="nav-item" data-view="pricing"><span>↗</span>Pricing watch</button>
+        <button class="nav-item" data-view="insights"><span>✦</span>Business insights</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="source-badge"><span class="live-dot"></span><div><b>Live snapshot</b><small>Inside Airbnb data</small></div></div>
+        <p>Revenue and occupancy are estimates derived from availability signals.</p>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb">AIRBNB / <strong>ALBANY MARKET</strong></div>
+        <div class="topbar-actions"><span id="last-updated">Processed snapshot</span><button class="icon-button" id="refresh-data" title="Refresh data">↻</button></div>
+      </header>
+
+      <section class="hero-row">
+        <div><p class="eyebrow">Market command center</p><h1 id="page-title">Know where the market is moving.</h1><p class="hero-copy">A clear operating view of revenue, demand, pricing signals, host performance and investment opportunity.</p></div>
+        <div class="hero-stamp"><span>Tracked window</span><strong id="tracked-window">Loading...</strong><small>calendar-derived performance</small></div>
+      </section>
+
+      <section class="filters" aria-label="Dashboard filters">
+        <label>Neighborhood<select id="neighborhood-filter"><option value="all">All neighborhoods</option></select></label>
+        <label>Room type<select id="room-filter"><option value="all">All room types</option></select></label>
+        <label>Search listing<input id="listing-search" type="search" placeholder="ID, property or host"></label>
+        <button class="clear-button" id="clear-filters">Clear filters</button>
+      </section>
+
+      <div id="loading" class="loading-state"><span class="spinner"></span>Loading processed market data...</div>
+      <div id="error" class="error-state" hidden>Data could not be loaded. Serve the project root with a local web server and refresh.</div>
+
+      <div id="dashboard" hidden>
+        <section class="kpi-grid" aria-label="Key performance indicators">
+          <article class="kpi-card accent"><div class="kpi-label">Estimated revenue</div><div class="kpi-value" id="kpi-revenue">—</div><div class="kpi-foot">calendar-derived, USD</div></article>
+          <article class="kpi-card"><div class="kpi-label">Weighted occupancy</div><div class="kpi-value" id="kpi-occupancy">—</div><div class="kpi-foot" id="kpi-occupancy-foot">tracked nights</div></article>
+          <article class="kpi-card"><div class="kpi-label">RevPAR</div><div class="kpi-value" id="kpi-revpar">—</div><div class="kpi-foot">revenue per available night</div></article>
+          <article class="kpi-card"><div class="kpi-label">Listings analyzed</div><div class="kpi-value" id="kpi-listings">—</div><div class="kpi-foot" id="kpi-listings-foot">priced listings</div></article>
+          <article class="kpi-card warning"><div class="kpi-label">Action queue</div><div class="kpi-value" id="kpi-actions">—</div><div class="kpi-foot">pricing signals + stale listings</div></article>
+        </section>
+
+        <section class="view overview-view" data-panel="overview">
+          <div class="section-heading"><div><p class="eyebrow">Executive readout</p><h2>Revenue has a center of gravity.</h2></div><span class="section-note">Use filters to reframe every view</span></div>
+          <div class="chart-grid hero-charts">
+            <article class="panel large-panel"><div class="panel-heading"><div><h3>Monthly revenue pulse</h3><p>Where the tracked calendar is strongest</p></div><span class="legend"><i class="legend-dot revenue-dot"></i>Revenue</span></div><div id="seasonality-chart" class="seasonality-chart"></div></article>
+            <article class="panel"><div class="panel-heading"><div><h3>Market composition</h3><p>Listing mix by room type</p></div></div><div id="room-mix" class="donut-wrap"></div><div id="room-legend" class="room-legend"></div></article>
+          </div>
+          <div class="chart-grid lower-charts">
+            <article class="panel"><div class="panel-heading"><div><h3>Revenue leaders</h3><p>Top neighborhoods by estimated revenue</p></div><button class="text-button" data-view-target="market">View market →</button></div><div id="neighborhood-bars" class="bar-list"></div></article>
+            <article class="panel insight-panel"><div class="panel-heading"><div><h3>Decision signal</h3><p id="signal-theme">Current market read</p></div><span class="signal-icon">✦</span></div><h4 id="signal-finding">—</h4><p id="signal-recommendation">—</p><div class="caveat" id="signal-caveat">—</div></article>
+          </div>
+        </section>
+
+        <section class="view market-view" data-panel="market" hidden>
+          <div class="section-heading"><div><p class="eyebrow">Market mix</p><h2>Find the next neighborhood to watch.</h2></div><span class="section-note">Rank by revenue, occupancy and RevPAR</span></div>
+          <div class="chart-grid two-thirds"><article class="panel large-panel"><div class="panel-heading"><div><h3>Neighborhood performance matrix</h3><p>Revenue concentration against operating efficiency</p></div></div><div class="table-wrap"><table><thead><tr><th>Neighborhood</th><th>Listings</th><th>Revenue</th><th>Occupancy</th><th>RevPAR</th><th>Est. ROI</th></tr></thead><tbody id="market-table"></tbody></table></div></article><article class="panel"><div class="panel-heading"><div><h3>Host advantage</h3><p>Superhost versus non-superhost</p></div></div><div id="host-comparison" class="comparison"></div><div class="callout teal">Superhosts show a materially stronger RevPAR signal in this snapshot.</div></article></div>
+        </section>
+
+        <section class="view pricing-view" data-panel="pricing" hidden>
+          <div class="section-heading"><div><p class="eyebrow">Pricing watch</p><h2>Turn outliers into an action list.</h2></div><span class="section-note">Sorted by pricing gap and recency risk</span></div>
+          <div class="chart-grid two-thirds"><article class="panel large-panel"><div class="panel-heading"><div><h3>Listings needing attention</h3><p>Listings with a pricing signal or stale-review flag</p></div><span class="table-count" id="pricing-count">—</span></div><div class="table-wrap"><table><thead><tr><th>Listing</th><th>Neighborhood</th><th>Base price</th><th>ADR</th><th>Gap</th><th>Status</th></tr></thead><tbody id="pricing-table"></tbody></table></div></article><article class="panel"><div class="panel-heading"><div><h3>Pricing reality check</h3><p>Interpret this view carefully</p></div></div><div class="big-stat" id="pricing-stat">—</div><p class="panel-copy">The supplied calendar has no nightly price field. Calendar prices were backfilled from base listing price, so most pricing gaps are provisional.</p><div class="caveat">Refresh with nightly calendar prices before automating host recommendations.</div></article></div>
+        </section>
+
+        <section class="view insights-view" data-panel="insights" hidden>
+          <div class="section-heading"><div><p class="eyebrow">Business insights</p><h2>From signal to decision.</h2></div><span class="section-note">Finding · recommendation · caveat</span></div>
+          <div id="insight-grid" class="insight-grid"></div>
+        </section>
+      </div>
+      <footer class="footer"><span>Airbnb Market Intelligence</span><span>Derived from processed project data · synthetic valuation clearly labeled</span></footer>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

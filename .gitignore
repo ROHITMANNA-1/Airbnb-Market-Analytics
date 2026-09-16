@@ -1,0 +1,19 @@
+# Raw and processed data (too large / not for version control)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# Power BI
+*.pbix.bak
+
+# OS
+.DS_Store
+Thumbs.db
